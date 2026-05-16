@@ -21,7 +21,7 @@ app.add_middleware(
 )
 
 # --- Environment Variables ---
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyAM4hDHpcfwTqhO4vlAjfn1mxkUbKGFqsE")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
