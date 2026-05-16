@@ -25,7 +25,10 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyAM4hDHpcfwTqhO4vlAjfn1m
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
-GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
+
+def get_gemini_url(model: str) -> str:
+    return f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
 
 # Initialize Supabase (optional - only if env vars are set)
 supabase: Client | None = None
@@ -110,39 +113,49 @@ Rules:
         }
     }).encode("utf-8")
 
-    req = urllib.request.Request(
-        GEMINI_URL,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
+    import time
+    last_error = None
 
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read())
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
-            # Parse the JSON response
-            analysis = json.loads(text)
+    for model in GEMINI_MODELS:
+        url = get_gemini_url(model)
+        for attempt in range(2):  # retry once per model
+            req = urllib.request.Request(
+                url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    result = json.loads(resp.read())
+                    text = result["candidates"][0]["content"]["parts"][0]["text"]
+                    analysis = json.loads(text)
 
-            # Validate required fields
-            required = ["summary", "sentiment", "risk_level", "key_points", "recommendation"]
-            for field in required:
-                if field not in analysis:
-                    raise ValueError(f"Missing field: {field}")
+                    # Validate required fields
+                    required = ["summary", "sentiment", "risk_level", "key_points", "recommendation"]
+                    for field in required:
+                        if field not in analysis:
+                            raise ValueError(f"Missing field: {field}")
 
-            # Validate enum values
-            if analysis["sentiment"] not in ["Bullish", "Neutral", "Bearish"]:
-                analysis["sentiment"] = "Neutral"
-            if analysis["risk_level"] not in ["Low", "Medium", "High"]:
-                analysis["risk_level"] = "Medium"
+                    # Validate enum values
+                    if analysis["sentiment"] not in ["Bullish", "Neutral", "Bearish"]:
+                        analysis["sentiment"] = "Neutral"
+                    if analysis["risk_level"] not in ["Low", "Medium", "High"]:
+                        analysis["risk_level"] = "Medium"
 
-            return analysis
+                    return analysis
 
-    except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        raise HTTPException(status_code=502, detail=f"Gemini API error: {body}")
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=502, detail=f"Invalid JSON from Gemini: {str(e)}")
+            except urllib.error.HTTPError as e:
+                body = e.read().decode()
+                last_error = body
+                if e.code == 429:
+                    time.sleep(5)
+                    continue  # retry or try next model
+                raise HTTPException(status_code=502, detail=f"Gemini API error: {body}")
+            except json.JSONDecodeError as e:
+                raise HTTPException(status_code=502, detail=f"Invalid JSON from Gemini: {str(e)}")
+
+    raise HTTPException(status_code=502, detail=f"All Gemini models exhausted. Last error: {last_error}")
 
 
 # --- Helper: Save to Supabase ---
