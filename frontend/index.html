@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 股票分析仪</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0f1e; --card: #111827; --card2: #1a2235;
+    --border: #1e2d45; --accent: #3b82f6; --accent2: #8b5cf6;
+    --green: #10b981; --red: #ef4444; --yellow: #f59e0b;
+    --text: #e2e8f0; --muted: #64748b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Header */
+  header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 0;
+    text-align: center;
+  }
+  header h1 { font-size: 2rem; font-weight: 700; background: linear-gradient(135deg, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  header p { color: var(--muted); margin-top: 6px; font-size: 0.9rem; }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 32px 16px; }
+
+  /* Search */
+  .search-box {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 24px; margin-bottom: 24px;
+  }
+  .search-row { display: flex; gap: 12px; }
+  .search-row input {
+    flex: 1; background: var(--card2); border: 1px solid var(--border);
+    color: var(--text); padding: 14px 18px; border-radius: 10px;
+    font-size: 1rem; font-family: 'Inter', sans-serif;
+    outline: none; transition: border-color 0.2s;
+  }
+  .search-row input:focus { border-color: var(--accent); }
+  .search-row input::placeholder { color: var(--muted); }
+  .btn {
+    padding: 14px 24px; border: none; border-radius: 10px;
+    font-size: 0.95rem; font-weight: 600; cursor: pointer;
+    transition: all 0.2s; font-family: 'Inter', sans-serif;
+  }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: white; }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Quick tickers */
+  .quick-tickers { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .ticker-chip {
+    padding: 6px 14px; background: var(--card2); border: 1px solid var(--border);
+    border-radius: 20px; font-size: 0.8rem; color: var(--muted);
+    cursor: pointer; transition: all 0.2s;
+  }
+  .ticker-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Loading */
+  .loading { text-align: center; padding: 48px; display: none; }
+  .spinner {
+    width: 48px; height: 48px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading p { color: var(--muted); }
+
+  /* Error */
+  .error-box {
+    background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
+    border-radius: 12px; padding: 16px; color: #fca5a5;
+    display: none; margin-bottom: 16px;
+  }
+
+  /* Results */
+  #results { display: none; animation: fadeIn 0.4s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Stock info card */
+  .stock-header {
+    background: linear-gradient(135deg, var(--card), var(--card2));
+    border: 1px solid var(--border); border-radius: 16px;
+    padding: 24px; margin-bottom: 16px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+  }
+  .stock-name h2 { font-size: 1.5rem; font-weight: 700; }
+  .stock-name span { color: var(--muted); font-size: 0.85rem; }
+  .stock-price { text-align: right; }
+  .stock-price .price { font-size: 2rem; font-weight: 700; }
+  .stock-price .change { font-size: 0.9rem; }
+  .up { color: var(--green); }
+  .down { color: var(--red); }
+
+  /* Metrics grid */
+  .metrics-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .metric-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px;
+  }
+  .metric-card .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .metric-card .value { font-size: 1.1rem; font-weight: 600; margin-top: 6px; }
+
+  /* Analysis card */
+  .analysis-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 24px; margin-bottom: 16px;
+  }
+  .analysis-card h3 { font-size: 1rem; color: var(--muted); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  .sentiment-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 20px; border-radius: 20px; font-weight: 700; font-size: 1rem;
+    margin-bottom: 16px;
+  }
+  .Bullish { background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.4); color: var(--green); }
+  .Neutral { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.4); color: var(--yellow); }
+  .Bearish { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: var(--red); }
+
+  .risk-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+  }
+  .Low { background: rgba(16,185,129,0.15); color: var(--green); }
+  .Medium { background: rgba(245,158,11,0.15); color: var(--yellow); }
+  .High { background: rgba(239,68,68,0.15); color: var(--red); }
+
+  .summary-text { color: #cbd5e1; line-height: 1.7; margin: 16px 0; }
+
+  .key-points { list-style: none; }
+  .key-points li {
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+    color: #94a3b8; font-size: 0.9rem;
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+  .key-points li::before { content: "→"; color: var(--accent); flex-shrink: 0; }
+  .key-points li:last-child { border-bottom: none; }
+
+  .recommendation {
+    background: linear-gradient(135deg, rgba(59,130,246,0.1), rgba(139,92,246,0.1));
+    border: 1px solid rgba(59,130,246,0.3);
+    border-radius: 10px; padding: 14px 16px;
+    color: #93c5fd; font-size: 0.9rem; margin-top: 16px;
+  }
+
+  /* Mini chart */
+  .chart-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 16px; }
+  canvas { width: 100%; height: 120px; display: block; }
+
+  /* Storage badge */
+  .storage-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 20px; font-size: 0.75rem;
+    background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.2);
+  }
+
+  /* History */
+  .history-section { margin-top: 32px; }
+  .history-section h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; color: var(--muted); }
+  .history-item {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; margin-bottom: 10px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    cursor: pointer; transition: border-color 0.2s;
+  }
+  .history-item:hover { border-color: var(--accent); }
+  .history-item .ticker { font-weight: 700; font-size: 1.05rem; }
+  .history-item .company { color: var(--muted); font-size: 0.8rem; }
+  .history-item .date { color: var(--muted); font-size: 0.75rem; }
+
+  @media (max-width: 600px) {
+    header h1 { font-size: 1.4rem; }
+    .search-row { flex-direction: column; }
+    .stock-header { flex-direction: column; }
+    .stock-price { text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📈 AI 股票分析仪</h1>
+  <p>由 Google Gemini 驱动 · 实时行情 · 智能分析</p>
+</header>
+
+<div class="container">
+
+  <!-- Search -->
+  <div class="search-box">
+    <div class="search-row">
+      <input type="text" id="tickerInput" placeholder="输入股票代码，例如: AAPL, TSLA, MSFT" autocomplete="off"/>
+      <button class="btn btn-primary" id="analyzeBtn" onclick="analyze()">🤖 AI 分析</button>
+    </div>
+    <div class="quick-tickers">
+      <span style="color:var(--muted);font-size:0.8rem;line-height:28px">快速选择:</span>
+      <span class="ticker-chip" onclick="quickPick('AAPL')">AAPL</span>
+      <span class="ticker-chip" onclick="quickPick('TSLA')">TSLA</span>
+      <span class="ticker-chip" onclick="quickPick('MSFT')">MSFT</span>
+      <span class="ticker-chip" onclick="quickPick('GOOGL')">GOOGL</span>
+      <span class="ticker-chip" onclick="quickPick('NVDA')">NVDA</span>
+      <span class="ticker-chip" onclick="quickPick('AMZN')">AMZN</span>
+      <span class="ticker-chip" onclick="quickPick('BTC-USD')">BTC</span>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div class="error-box" id="errorBox"></div>
+
+  <!-- Loading -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p id="loadingMsg">正在获取行情数据...</p>
+  </div>
+
+  <!-- Results -->
+  <div id="results">
+
+    <!-- Stock Header -->
+    <div class="stock-header">
+      <div class="stock-name">
+        <h2 id="resName">--</h2>
+        <span id="resTicker">--</span>
+        <span style="margin-left:8px" id="resSector"></span>
+      </div>
+      <div class="stock-price">
+        <div class="price" id="resPrice">--</div>
+        <div class="change" id="resChange">--</div>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="metrics-grid">
+      <div class="metric-card"><div class="label">市值</div><div class="value" id="mktCap">--</div></div>
+      <div class="metric-card"><div class="label">P/E 比率</div><div class="value" id="peRatio">--</div></div>
+      <div class="metric-card"><div class="label">52周高点</div><div class="value" id="high52">--</div></div>
+      <div class="metric-card"><div class="label">52周低点</div><div class="value" id="low52">--</div></div>
+      <div class="metric-card"><div class="label">成交量</div><div class="value" id="volume">--</div></div>
+      <div class="metric-card"><div class="label">平均成交量</div><div class="value" id="avgVol">--</div></div>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-wrap">
+      <h3 style="font-size:0.85rem;color:var(--muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.05em">近5日价格走势</h3>
+      <canvas id="priceChart"></canvas>
+    </div>
+
+    <!-- AI Analysis -->
+    <div class="analysis-card">
+      <h3>🤖 AI 分析报告</h3>
+      <div>
+        <span id="sentimentBadge" class="sentiment-badge">--</span>
+        <span id="riskBadge" class="risk-badge" style="margin-left:10px">--</span>
+        <span id="storageBadge" style="display:none;margin-left:10px" class="storage-badge">✅ 已存入数据库</span>
+      </div>
+      <p class="summary-text" id="resSummary">--</p>
+      <ul class="key-points" id="keyPoints"></ul>
+      <div class="recommendation" id="resRec">--</div>
+    </div>
+
+  </div>
+
+  <!-- History -->
+  <div class="history-section" id="historySection" style="display:none">
+    <h2>📋 历史分析记录</h2>
+    <div id="historyList"></div>
+  </div>
+
+</div>
+
+<script>
+  // ⚠️ 替换为你的 Render 后端 URL
+  const API_BASE = window.location.hostname === 'localhost'
+    ? 'http://localhost:8000'
+    : 'https://YOUR-BACKEND.onrender.com';  // 部署后替换此处
+
+  function quickPick(t) {
+    document.getElementById('tickerInput').value = t;
+    analyze();
+  }
+
+  document.getElementById('tickerInput').addEventListener('keypress', e => {
+    if (e.key === 'Enter') analyze();
+  });
+
+  function fmt(n) {
+    if (!n) return 'N/A';
+    if (n >= 1e12) return '$' + (n/1e12).toFixed(2) + 'T';
+    if (n >= 1e9)  return '$' + (n/1e9).toFixed(2) + 'B';
+    if (n >= 1e6)  return '$' + (n/1e6).toFixed(2) + 'M';
+    return n.toLocaleString();
+  }
+
+  function drawChart(dates, prices) {
+    const canvas = document.getElementById('priceChart');
+    const ctx = canvas.getContext('2d');
+    canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+    canvas.height = 120 * window.devicePixelRatio;
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    const W = canvas.offsetWidth, H = 120;
+    const min = Math.min(...prices), max = Math.max(...prices);
+    const range = max - min || 1;
+    const pad = { t: 10, b: 30, l: 50, r: 10 };
+    ctx.clearRect(0, 0, W, H);
+
+    const x = i => pad.l + (i / (prices.length - 1)) * (W - pad.l - pad.r);
+    const y = v => pad.t + (1 - (v - min) / range) * (H - pad.t - pad.b);
+
+    // Grid
+    ctx.strokeStyle = '#1e2d45'; ctx.lineWidth = 1;
+    for (let i = 0; i < 4; i++) {
+      const yy = pad.t + i * (H - pad.t - pad.b) / 3;
+      ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(W - pad.r, yy); ctx.stroke();
+    }
+
+    // Gradient fill
+    const grad = ctx.createLinearGradient(0, pad.t, 0, H - pad.b);
+    const isUp = prices[prices.length-1] >= prices[0];
+    grad.addColorStop(0, isUp ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.moveTo(x(0), y(prices[0]));
+    prices.forEach((p, i) => ctx.lineTo(x(i), y(p)));
+    ctx.lineTo(x(prices.length-1), H - pad.b);
+    ctx.lineTo(x(0), H - pad.b);
+    ctx.closePath();
+    ctx.fillStyle = grad; ctx.fill();
+
+    // Line
+    ctx.beginPath();
+    ctx.strokeStyle = isUp ? '#10b981' : '#ef4444';
+    ctx.lineWidth = 2.5;
+    prices.forEach((p, i) => i === 0 ? ctx.moveTo(x(i), y(p)) : ctx.lineTo(x(i), y(p)));
+    ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = '#64748b'; ctx.font = '11px Inter'; ctx.textAlign = 'center';
+    dates.forEach((d, i) => {
+      if (i === 0 || i === dates.length-1 || i === Math.floor(dates.length/2))
+        ctx.fillText(d.slice(5), x(i), H - 8);
+    });
+    ctx.textAlign = 'right';
+    [min, max].forEach(v => {
+      ctx.fillText('$' + v.toFixed(1), pad.l - 4, y(v) + 4);
+    });
+  }
+
+  async function analyze() {
+    const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
+    if (!ticker) return;
+
+    const btn = document.getElementById('analyzeBtn');
+    btn.disabled = true;
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('errorBox').style.display = 'none';
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('loadingMsg').textContent = '正在获取行情数据...';
+
+    try {
+      // Step 1: call /analyze
+      document.getElementById('loadingMsg').textContent = '🤖 AI 正在分析，请稍候...';
+      const resp = await fetch(`${API_BASE}/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker })
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.detail || '请求失败');
+      }
+      const data = await resp.json();
+      renderResults(data);
+      loadHistory();
+    } catch(e) {
+      document.getElementById('errorBox').textContent = '❌ ' + e.message;
+      document.getElementById('errorBox').style.display = 'block';
+    } finally {
+      document.getElementById('loading').style.display = 'none';
+      btn.disabled = false;
+    }
+  }
+
+  function renderResults(data) {
+    const s = data.stock, a = data.analysis;
+    const change = s.current_price - s.previous_close;
+    const changePct = (change / s.previous_close * 100).toFixed(2);
+    const isUp = change >= 0;
+
+    document.getElementById('resName').textContent = s.name;
+    document.getElementById('resTicker').textContent = s.ticker;
+    document.getElementById('resSector').innerHTML = s.sector !== 'N/A'
+      ? `<span style="background:var(--card2);padding:2px 10px;border-radius:10px;font-size:0.75rem;color:var(--muted)">${s.sector}</span>` : '';
+    document.getElementById('resPrice').textContent = `$${s.current_price}`;
+    document.getElementById('resChange').innerHTML =
+      `<span class="${isUp?'up':'down'}">${isUp?'▲':'▼'} $${Math.abs(change).toFixed(2)} (${isUp?'+':''}${changePct}%)</span>`;
+
+    document.getElementById('mktCap').textContent = fmt(s.market_cap);
+    document.getElementById('peRatio').textContent = s.pe_ratio ? s.pe_ratio.toFixed(2) : 'N/A';
+    document.getElementById('high52').textContent = s['52_week_high'] ? '$'+s['52_week_high'] : 'N/A';
+    document.getElementById('low52').textContent = s['52_week_low'] ? '$'+s['52_week_low'] : 'N/A';
+    document.getElementById('volume').textContent = fmt(s.volume);
+    document.getElementById('avgVol').textContent = fmt(s.avg_volume);
+
+    // Sentiment
+    const sb = document.getElementById('sentimentBadge');
+    sb.className = 'sentiment-badge ' + a.sentiment;
+    const icons = { Bullish: '📈', Neutral: '➡️', Bearish: '📉' };
+    sb.textContent = icons[a.sentiment] + ' ' + a.sentiment;
+
+    // Risk
+    const rb = document.getElementById('riskBadge');
+    rb.className = 'risk-badge ' + a.risk_level;
+    rb.textContent = '⚡ 风险: ' + a.risk_level;
+
+    document.getElementById('resSummary').textContent = a.summary;
+
+    const kp = document.getElementById('keyPoints');
+    kp.innerHTML = (a.key_points || []).map(p => `<li>${p}</li>`).join('');
+
+    document.getElementById('resRec').textContent = '💡 ' + (a.recommendation || '');
+
+    // Storage badge
+    const storageBadge = document.getElementById('storageBadge');
+    storageBadge.style.display = data.storage?.saved ? 'inline-flex' : 'none';
+
+    document.getElementById('results').style.display = 'block';
+
+    // Draw chart
+    setTimeout(() => {
+      if (s.price_history?.dates?.length > 1) {
+        drawChart(s.price_history.dates, s.price_history.prices);
+      }
+    }, 100);
+  }
+
+  async function loadHistory() {
+    try {
+      const resp = await fetch(`${API_BASE}/history`);
+      const data = await resp.json();
+      if (!data.data || data.data.length === 0) return;
+
+      const container = document.getElementById('historyList');
+      container.innerHTML = data.data.map(item => `
+        <div class="history-item">
+          <div>
+            <div class="ticker">${item.ticker}</div>
+            <div class="company">${item.company_name}</div>
+          </div>
+          <span class="sentiment-badge ${item.sentiment}" style="padding:4px 12px;font-size:0.8rem">${item.sentiment}</span>
+          <span class="risk-badge ${item.risk_level}">风险: ${item.risk_level}</span>
+          <div class="date">${new Date(item.created_at).toLocaleString('zh-CN')}</div>
+        </div>
+      `).join('');
+      document.getElementById('historySection').style.display = 'block';
+    } catch(_) {}
+  }
+
+  // Load history on page load
+  loadHistory();
+</script>
+</body>
+</html>
